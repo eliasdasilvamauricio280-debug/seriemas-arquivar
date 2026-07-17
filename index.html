@@ -2524,12 +2524,14 @@ async function sbLoadArquivar(){
   const rows = await sbFetch('arquivar?select=*');
   if(!rows){
     toast('⚠️ Supabase offline — usando dados locais','err',4000);
+    loadSt(); // fallback to localStorage
     return;
   }
+  // Replace state completely with Supabase data
+  state = {};
   rows.forEach(r=>{ state[r.mat]={ok:r.ok,com:r.com||'',box:r.box||'',ts:r.ts}; });
   saveSt();
-  applyF(); updKPI();
-  toast('☁️ Dados sincronizados com a nuvem','ok',2000);
+  toast('☁️ '+rows.length+' registros sincronizados','ok',2000);
 }
 async function sbSaveItem(mat, ok, com, box){
   await sbFetch('arquivar', {
@@ -2608,15 +2610,35 @@ function doLogin(perfil){
   document.getElementById('btnAdd').style.display=p==='rh'?'inline-flex':'none';
   const thAcoes=document.getElementById('th-acoes');
   if(thAcoes) thAcoes.style.display=p==='rh'?'':'none';
-  loadSt(); applyF(); updKPI();
-  // Load from Supabase (async, updates UI when ready)
-  sbLoadArquivar();
+  // Clear local cache and load fresh from Supabase
+  state = {};
+  localStorage.removeItem(SK);
+  toast('⏳ Carregando dados da nuvem...', '', 2000);
+  sbLoadArquivar().then(() => {
+    applyF(); updKPI();
+    startAutoRefresh();
+  });
   if(p==='rh') sbLoadHisto();
 }
+function startAutoRefresh() {
+  // Auto-refresh data every 30 seconds for all users
+  if(window._refreshTimer) clearInterval(window._refreshTimer);
+  window._refreshTimer = setInterval(async () => {
+    const rows = await sbFetch('arquivar?select=*');
+    if(!rows) return;
+    state = {};
+    rows.forEach(r=>{ state[r.mat]={ok:r.ok,com:r.com||'',box:r.box||'',ts:r.ts}; });
+    saveSt();
+    applyF(); updKPI();
+  }, 30000);
+}
+
 function doLogout(){
+  if(window._refreshTimer) clearInterval(window._refreshTimer);
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appScreen').style.display='none';
   document.getElementById('lSenha').value='';role='';
+  state={};
 }
 
 /* ── FILTERS ── */
