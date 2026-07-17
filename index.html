@@ -291,6 +291,7 @@ tbody tr:last-child td{border-bottom:none;}
       <div class="tbr">
         <button class="btn" onclick="clearF()"><i class="ti ti-filter-off"></i> Limpar</button>
         <button class="btn btn-green" id="btnMk" onclick="markAll()"><i class="ti ti-checks"></i> Marcar visíveis</button>
+        <button class="btn btn-primary" id="btnAdd" onclick="openColab()" style="display:none"><i class="ti ti-user-plus"></i> Adicionar</button>
       </div>
     </div>
 
@@ -319,6 +320,7 @@ tbody tr:last-child td{border-bottom:none;}
             <th class="nosort" style="min-width:90px">Caixa Box</th>
             <th class="nosort" style="min-width:140px">Comentário</th>
             <th onclick="sBy('status')" id="th-status">Pasta <span class="ti ti-arrows-sort" style="font-size:10px;opacity:.4"></span></th>
+            <th class="nosort" id="th-acoes" style="width:70px;display:none">Ações</th>
           </tr></thead>
           <tbody id="tBody"></tbody>
         </table>
@@ -576,6 +578,18 @@ tbody tr:last-child td{border-bottom:none;}
   </div>
 
 </div><!-- /panel-histo -->
+
+<!-- MODAL COLABORADOR -->
+<div id="colabModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:9999" onclick="closeColabModal(event)">
+  <div style="background:#fff;border-radius:12px;padding:1.5rem;width:100%;max-width:520px;box-shadow:0 8px 32px rgba(0,0,0,.18);max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div id="colabModalTitle" style="font-size:16px;font-weight:700;margin-bottom:1.25rem;color:var(--text)"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="colabModalBody"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1.25rem;flex-wrap:wrap;">
+      <button onclick="document.getElementById('colabModal').style.display='none'" style="padding:8px 16px;border-radius:8px;border:1px solid rgba(0,0,0,.2);background:#fff;cursor:pointer;font-family:var(--font);">Cancelar</button>
+      <button onclick="saveColab()" style="padding:8px 16px;border-radius:8px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:var(--font);font-weight:600;display:flex;align-items:center;gap:5px;"><i class="ti ti-check"></i> Salvar</button>
+    </div>
+  </div>
+</div>
 
 
 <div class="toast-wrap" id="tw"></div>
@@ -2481,8 +2495,8 @@ const COLABORADORES=[
 /* ── CONFIG ── */
 const SENHA='seriemas2025';
 const SK='arquivar_v2';
-const SB_URL='https://pmwgyyclaencpotjdbfq.supabase.co';
-const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtd2d5eWNsYWVuY3BvdGpkYmZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTkyMzIsImV4cCI6MjA5MzgzNTIzMn0.8wAk_9w1uVVKFXrthnnk8-PIZNR3YVN1Y1j5R_QP03Y';
+const SB_URL='https://hxjreuodkrzeosmnqqmx.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4anJldW9ka3J6ZW9zbW5xcW14Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyODQ4OTcsImV4cCI6MjA5OTg2MDg5N30.lIu_NTGTUAYafm2DrLea4QNcQUfvirIRvaSYDznTIZ4';
 
 /* ── Supabase helper ── */
 async function sbFetch(path, opts={}) {
@@ -2584,6 +2598,9 @@ function doLogin(perfil){
   document.getElementById('badgeRole').textContent=p==='rh'?'👤 RH — Editor':'👁 Visualizador';
   document.getElementById('badgeRole').className='badge-role '+(p==='rh'?'badge-rh':'badge-vis');
   document.getElementById('btnMk').style.display=p==='rh'?'inline-flex':'none';
+  document.getElementById('btnAdd').style.display=p==='rh'?'inline-flex':'none';
+  const thAcoes=document.getElementById('th-acoes');
+  if(thAcoes) thAcoes.style.display=p==='rh'?'':'none';
   loadSt(); applyF(); updKPI();
   // Load from Supabase (async, updates UI when ready)
   sbLoadArquivar();
@@ -2674,6 +2691,10 @@ function render(){
     const demStr=c.dem
       ?`<span class="date-dem"><i class="ti ti-calendar-x" style="font-size:10px"></i> ${c.dem}</span>`
       :`<span style="color:var(--text3);font-size:11px">—</span>`;
+    const acoesCell=isRH?`<td style="padding:4px 8px;display:flex;gap:3px;">
+        <button onclick="openColab('${k}')" style="padding:3px 6px;font-size:11px;border-radius:6px;border:1px solid rgba(0,0,0,.15);background:#fff;cursor:pointer;" title="Editar"><i class="ti ti-edit"></i></button>
+        <button onclick="delColab('${k}')" style="padding:3px 6px;font-size:11px;border-radius:6px;border:1px solid #a32d2d;color:#a32d2d;background:#fff;cursor:pointer;" title="Excluir"><i class="ti ti-trash"></i></button>
+      </td>`:'';
     return `<tr class="${rc}" data-k="${k}">
       <td class="chk-cell"><div class="ccheck ${cc}" ${ptr} onclick="tgl('${k}',this)" title="${d.ok?'Desmarcar':'Concluir'}"></div></td>
       <td class="num-cell">${s+i+1}</td>
@@ -2686,6 +2707,7 @@ function render(){
       <td><input class="tag-inp" type="text" value="${bv}" placeholder="BOX-" ${dis} onblur="svBox('${k}',this.value)" onkeydown="if(event.key==='Enter')this.blur()"></td>
       <td><input class="comm-inp" type="text" value="${cv}" placeholder="${isRH?'Obs...':'—'}" ${dis} onblur="svCom('${k}',this.value)" onkeydown="if(event.key==='Enter')this.blur()"></td>
       <td>${d.ok?`<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>`:`<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>`}</td>
+      ${acoesCell}
     </tr>`;
   }).join('');
 
@@ -3248,6 +3270,123 @@ function hSort(colIdx) {
     const th = document.getElementById('hth-' + i);
     if (th) th.style.color = i === colIdx ? 'var(--blue)' : 'var(--text2)';
   }
+}
+
+
+/* ════════════════════════════════
+   CRUD COLABORADORES
+   ════════════════════════════════ */
+let colabEditKey = null;
+
+function fi(id, label, val='', type='text', full=false) {
+  const span = full ? 'grid-column:1/-1;' : '';
+  return `<div style="${span}margin-bottom:2px;">
+    <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);display:block;margin-bottom:4px;">${label}</label>
+    <input id="cm-${id}" type="${type}" value="${val||''}"
+      style="width:100%;font-size:13px;padding:8px 10px;border-radius:8px;border:1.5px solid rgba(0,0,0,.18);background:#fff;color:var(--text);font-family:var(--font);">
+  </div>`;
+}
+function fs(id, label, opts, val='', full=false) {
+  const span = full ? 'grid-column:1/-1;' : '';
+  return `<div style="${span}margin-bottom:2px;">
+    <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);display:block;margin-bottom:4px;">${label}</label>
+    <select id="cm-${id}" style="width:100%;font-size:13px;padding:8px 10px;border-radius:8px;border:1.5px solid rgba(0,0,0,.18);background:#fff;color:var(--text);font-family:var(--font);">
+      ${opts.map(o=>Array.isArray(o)?`<option value="${o[0]}"${o[0]===val?' selected':''}>${o[1]}</option>`:`<option${o===val?' selected':''}>${o}</option>`).join('')}
+    </select>
+  </div>`;
+}
+
+function openColab(k=null) {
+  if(role!=='rh') return;
+  colabEditKey = k;
+  const modal = document.getElementById('colabModal');
+  const title = document.getElementById('colabModalTitle');
+  const body  = document.getElementById('colabModalBody');
+
+  let c = k ? COLABORADORES.find(x=>key(x)===k) : null;
+  if(k && !c) { toast('Colaborador não encontrado','err'); return; }
+
+  title.textContent = k ? '✏️ Editar colaborador' : '➕ Adicionar colaborador';
+
+  const DISCS = ['ADMINISTRIVO','ADMINISTRIVO - ALMOXARIFADO','ADMINISTRIVO - ALOJAMENTO','ADMINISTRIVO - SUPRIMENTOS','ADMINISTRIVO - TRANSPORTE','CIVIL - TASSIO','ELÉTRICA','GERÊNCIA','LOGÍSTICA','MANUTENÇÃO','MECÂNICA','MECÂNICA - BRUNO','MEIO AMBIENTE - DANI','QUALIDADE','RH','SALA TÉCNICA','SEGURANÇA'];
+
+  body.innerHTML =
+    fi('mat',   'Matrícula',  c?.mat,  'text') +
+    fi('nome',  'Nome completo', c?.nome, 'text') +
+    fi('cargo', 'Cargo',      c?.cargo,'text') +
+    fs('disc',  'Disciplina', DISCS,   c?.disc) +
+    fs('sit',   'Situação',   [['A','Ativo (A)'],['D','Desligado (D)'],['P','Afastado (P)'],['E','Gestante (E)'],['F','Férias (F)']], c?.sit||'A') +
+    fs('tipo',  'Tipo MO',    [['D','Direto (MOD)'],['I','Indireto (MOI)']], c?.tipo||'D') +
+    fi('adm',   'Admissão',   c?.adm ? fmtDateInput(c.adm) : '', 'date') +
+    fi('dem',   'Demissão',   c?.dem ? fmtDateInput(c.dem) : '', 'date');
+
+  modal.style.display = 'flex';
+}
+
+function fmtDateInput(v) {
+  if(!v) return '';
+  const p = v.split('/');
+  if(p.length===3) return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+  return v;
+}
+function fmtDateBR(v) {
+  if(!v) return '';
+  const d = new Date(v+'T12:00:00');
+  if(isNaN(d)) return v;
+  return d.toLocaleDateString('pt-BR');
+}
+
+function gv(id) { return (document.getElementById('cm-'+id)||{}).value||''; }
+
+function saveColab() {
+  const mat  = gv('mat').trim();
+  const nome = gv('nome').trim().toUpperCase();
+  const cargo= gv('cargo').trim().toUpperCase();
+  const disc = gv('disc');
+  const sit  = gv('sit');
+  const tipo = gv('tipo');
+  const adm  = fmtDateBR(gv('adm'));
+  const dem  = fmtDateBR(gv('dem'));
+
+  if(!nome) { toast('Nome é obrigatório','err'); return; }
+
+  if(colabEditKey) {
+    // Edit existing
+    const idx = COLABORADORES.findIndex(x=>key(x)===colabEditKey);
+    if(idx>=0) {
+      COLABORADORES[idx] = {mat, nome, sit, adm, dem, tipo, cargo, disc};
+    }
+    toast('✅ Colaborador atualizado','ok');
+  } else {
+    // Add new
+    if(COLABORADORES.find(x=>x.mat===mat && mat!=='')) {
+      toast('Matrícula já existe','err'); return;
+    }
+    COLABORADORES.push({mat, nome, sit, adm, dem, tipo, cargo, disc});
+    toast('✅ Colaborador adicionado','ok');
+  }
+
+  document.getElementById('colabModal').style.display='none';
+  applyF();
+  updKPI();
+}
+
+function delColab(k) {
+  if(role!=='rh') return;
+  const c = COLABORADORES.find(x=>key(x)===k);
+  if(!c) return;
+  if(!confirm(`Excluir "${c.nome}"?\nEssa ação não pode ser desfeita.`)) return;
+  const idx = COLABORADORES.findIndex(x=>key(x)===k);
+  if(idx>=0) COLABORADORES.splice(idx,1);
+  // Remove state
+  delete state[k]; saveSt();
+  applyF(); updKPI();
+  toast('🗑️ Colaborador removido','ok');
+}
+
+function closeColabModal(e) {
+  if(e.target===document.getElementById('colabModal'))
+    document.getElementById('colabModal').style.display='none';
 }
 
 </script>
