@@ -2500,15 +2500,14 @@ const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 
 /* ── Supabase helper ── */
 async function sbFetch(path, opts={}) {
-  const res = await fetch(SB_URL+'/rest/v1/'+path, {
-    headers: {
-      'apikey': SB_KEY,
-      'Authorization': 'Bearer '+SB_KEY,
-      'Content-Type': 'application/json',
-      'Prefer': opts.prefer||'return=minimal'
-    },
-    ...opts
-  });
+  const {prefer, ...rest} = opts;
+  const headers = {
+    'apikey': SB_KEY,
+    'Authorization': 'Bearer '+SB_KEY,
+    'Content-Type': 'application/json',
+  };
+  if(prefer) headers['Prefer'] = prefer;
+  const res = await fetch(SB_URL+'/rest/v1/'+path, { headers, ...rest });
   if(!res.ok) { console.error('Supabase error', res.status, await res.text()); return null; }
   const txt = await res.text();
   return txt ? JSON.parse(txt) : null;
@@ -2523,10 +2522,14 @@ function saveSt(){localStorage.setItem(SK,JSON.stringify(state));}
 /* ── Supabase sync ── */
 async function sbLoadArquivar(){
   const rows = await sbFetch('arquivar?select=*');
-  if(!rows) return;
+  if(!rows){
+    toast('⚠️ Supabase offline — usando dados locais','err',4000);
+    return;
+  }
   rows.forEach(r=>{ state[r.mat]={ok:r.ok,com:r.com||'',box:r.box||'',ts:r.ts}; });
   saveSt();
   applyF(); updKPI();
+  toast('☁️ Dados sincronizados com a nuvem','ok',2000);
 }
 async function sbSaveItem(mat, ok, com, box){
   await sbFetch('arquivar', {
@@ -2566,15 +2569,19 @@ async function sbLoadRest(){
   if(est)  estData  = est.map(r=>({...r, termino:r.termino||''}));
 }
 async function sbSaveRest(table, data){
-  // Upsert: delete all then insert (simpler for small sets)
-  await sbFetch(table+'?id=neq.00000000-0000-0000-0000-000000000000', {method:'DELETE'});
+  // Delete all existing rows then insert fresh
+  await fetch(SB_URL+'/rest/v1/'+table+'?id=neq.00000000-0000-0000-0000-000000000000', {
+    method:'DELETE',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'}
+  });
   if(data.length===0) return;
-  const clean = data.map(({id, created_at, ...rest})=>rest);
-  await sbFetch(table, {
+  const clean = data.map(({id, created_at, ...r})=>r);
+  const res = await fetch(SB_URL+'/rest/v1/'+table, {
     method:'POST',
-    prefer:'return=minimal',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
     body: JSON.stringify(clean)
   });
+  if(!res.ok) console.error('sbSaveRest error', table, res.status, await res.text());
 }
 function key(c){return c.mat && c.mat!=='0'?c.mat:c.nome;}
 function getD(c){return state[key(c)]||{ok:false,com:'',box:'',ts:null};}
