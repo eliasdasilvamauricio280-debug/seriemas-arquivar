@@ -2527,20 +2527,28 @@ async function sbLoadArquivar(){
     loadSt();
     return;
   }
-  // Build a lookup by mat for fast access
+  // Build a lookup by mat — both with and without leading zeros
   const sbMap = {};
-  rows.forEach(r=>{ sbMap[r.mat] = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts}; });
+  rows.forEach(r=>{
+    const d = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts};
+    sbMap[r.mat] = d;
+    // Also index by numeric value (strips leading zeros) for compatibility
+    const num = String(parseInt(r.mat)||r.mat);
+    if(num !== r.mat) sbMap[num] = d;
+  });
   
   // Map Supabase data to our state keys using the same key() logic
   state = {};
   COLABORADORES.forEach(c => {
     const k = key(c);
-    // Try mat first, then nome-based key
-    const sb = sbMap[k] || sbMap[c.mat] || sbMap['nome:'+c.nome];
+    const matStr = String(c.mat||'').trim();
+    const matNum = String(parseInt(matStr)||matStr);
+    // Try all possible key variants
+    const sb = sbMap[k] || sbMap[matStr] || sbMap[matNum] || sbMap['nome:'+c.nome];
     if(sb) state[k] = sb;
   });
   
-  // Also keep any other keys from Supabase (edge cases)
+  // Also keep any other keys from Supabase not matched above
   rows.forEach(r=>{
     if(!state[r.mat]) state[r.mat] = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts};
   });
@@ -2551,9 +2559,7 @@ async function sbLoadArquivar(){
 }
 async function sbSaveItem(mat, ok, com, box){
   window._savePending = false;
-  // Ensure mat is never null/empty/0 — use the key as-is (already fixed by key() function)
-  const safeMat = mat && mat !== '0' ? mat : mat;
-  if(!safeMat) { console.warn('sbSaveItem: empty mat, skipping'); return; }
+  if(!mat) { console.warn('sbSaveItem: empty mat'); return false; }
   try {
     const res = await fetch(SB_URL+'/rest/v1/arquivar', {
       method: 'POST',
@@ -2563,15 +2569,18 @@ async function sbSaveItem(mat, ok, com, box){
         'Content-Type': 'application/json',
         'Prefer': 'resolution=merge-duplicates,return=minimal'
       },
-      body: JSON.stringify({mat:safeMat, ok, com, box, ts: new Date().toISOString()})
+      body: JSON.stringify({mat, ok, com, box, ts: new Date().toISOString()})
     });
     if(!res.ok) {
       const err = await res.text();
-      console.error('sbSaveItem failed:', res.status, err);
-      toast('⚠️ Erro ao salvar','err',3000);
+      console.error('sbSaveItem FAILED:', res.status, err);
+      return false;
     }
+    console.log('sbSaveItem OK:', mat, ok);
+    return true;
   } catch(e) {
-    console.error('sbSaveItem exception:', e);
+    console.error('sbSaveItem ERROR:', e);
+    return false;
   }
 }
 async function sbLoadHisto(){
@@ -2620,8 +2629,9 @@ async function sbSaveRest(table, data){
   if(!res.ok) console.error('sbSaveRest error', table, res.status, await res.text());
 }
 function key(c){
-  if(!c.mat || c.mat==='0' || c.mat.trim()==='') return 'nome:'+c.nome;
-  return c.mat.trim();
+  const m = String(c.mat||'').trim();
+  if(!m || m==='0') return 'nome:'+c.nome;
+  return m; // Keep as string - preserves leading zeros like '014452'
 }
 function getD(c){return state[key(c)]||{ok:false,com:'',box:'',ts:null};}
 function setD(c,ok,com,box){
@@ -2811,11 +2821,33 @@ function tgl(k,el){
   const c=COLABORADORES.find(x=>key(x)===k);if(!c)return;
   const d=getD(c);
   const now=!d.ok;
-  // Save immediately to Supabase
   const ts = new Date().toISOString();
   state[k]={ok:now, com:d.com||'', box:d.box||'', ts};
   saveSt();
-  sbSaveItem(k, now, d.com||'', d.box||'');
+  // Show saving indicator
+  const row=el.closest('tr');
+  const statusCell=row?row.querySelector('td:last-child'):null;
+  if(statusCell) statusCell.innerHTML='<span style="color:#854f0b;font-size:10px;font-weight:600">⏳ Salvando...</span>';
+  sbSaveItem(k, now, d.com||'', d.box||'').then(success=>{
+    if(statusCell){
+      if(success){
+        statusCell.innerHTML=now
+          ?'<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>'
+          :'<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>';
+      } else {
+        // Rollback on failure
+        state[k]={ok:d.ok, com:d.com||'', box:d.box||'', ts:d.ts};
+        saveSt();
+        el.classList.toggle('on',d.ok);
+        row.classList.toggle('concluido',d.ok);
+        statusCell.innerHTML=d.ok
+          ?'<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>'
+          :'<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>';
+        toast('❌ Erro ao salvar — tente novamente','err',4000);
+        return;
+      }
+    }
+  });
   el.classList.toggle('on',now);
   const row=el.closest('tr');
   row.className=now?'concluido':(c.sit==='D'?'desligado':'');
@@ -2825,17 +2857,17 @@ function tgl(k,el){
   updKPI();
   toast(now?'✅ Pasta concluída':'↩ Desmarcada',now?'ok':'');
 }
-function svBox(k,v){
+async function svBox(k,v){
   if(role!=='rh')return;
   const c=COLABORADORES.find(x=>key(x)===k);if(!c)return;
   const d=getD(c);
   if((d.box||'')===v)return;
-  // Save box directly to Supabase
   const ts = new Date().toISOString();
   state[k]={...d, box:v, ts};
   saveSt();
-  sbSaveItem(k, d.ok, d.com||'', v);
-  toast('📦 Caixa box salva','ok');
+  const ok = await sbSaveItem(k, d.ok, d.com||'', v);
+  if(ok) toast('📦 Caixa box salva','ok');
+  else toast('❌ Erro ao salvar caixa box','err',3000);
 }
 function svCom(k,v){
   if(role!=='rh')return;
