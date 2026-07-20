@@ -2821,41 +2821,39 @@ function tgl(k,el){
   const c=COLABORADORES.find(x=>key(x)===k);if(!c)return;
   const d=getD(c);
   const now=!d.ok;
-  const ts = new Date().toISOString();
-  state[k]={ok:now, com:d.com||'', box:d.box||'', ts};
-  saveSt();
-  // Show saving indicator
+  const ts=new Date().toISOString();
   const row=el.closest('tr');
-  const statusCell=row?row.querySelector('td:last-child'):null;
-  if(statusCell) statusCell.innerHTML='<span style="color:#854f0b;font-size:10px;font-weight:600">⏳ Salvando...</span>';
-  sbSaveItem(k, now, d.com||'', d.box||'').then(success=>{
-    if(statusCell){
-      if(success){
-        statusCell.innerHTML=now
-          ?'<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>'
-          :'<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>';
-      } else {
-        // Rollback on failure
-        state[k]={ok:d.ok, com:d.com||'', box:d.box||'', ts:d.ts};
-        saveSt();
-        el.classList.toggle('on',d.ok);
-        row.classList.toggle('concluido',d.ok);
-        statusCell.innerHTML=d.ok
-          ?'<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>'
-          :'<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>';
-        toast('❌ Erro ao salvar — tente novamente','err',4000);
-        return;
-      }
+  // Update UI immediately
+  el.classList.toggle('on',now);
+  if(row){
+    row.className=now?'concluido':(c.sit==='D'?'desligado':'');
+    const sc=row.querySelector('td:last-child');
+    if(sc) sc.innerHTML='<span style="color:#854f0b;font-size:11px;font-weight:600">⏳ Salvando...</span>';
+  }
+  updKPI();
+  // Save to state and Supabase
+  state[k]={ok:now,com:d.com||'',box:d.box||'',ts};
+  saveSt();
+  sbSaveItem(k,now,d.com||'',d.box||'').then(success=>{
+    const sc=row?row.querySelector('td:last-child'):null;
+    if(success){
+      if(sc) sc.innerHTML=now
+        ?'<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>'
+        :'<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>';
+      toast(now?'✅ Pasta concluída':'↩ Desmarcada',now?'ok':'');
+    } else {
+      // Rollback
+      state[k]={ok:d.ok,com:d.com||'',box:d.box||'',ts:d.ts};
+      saveSt();
+      el.classList.toggle('on',d.ok);
+      if(row) row.className=d.ok?'concluido':(c.sit==='D'?'desligado':'');
+      if(sc) sc.innerHTML=d.ok
+        ?'<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>'
+        :'<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>';
+      toast('❌ Erro ao salvar — tente novamente','err',4000);
+      updKPI();
     }
   });
-  el.classList.toggle('on',now);
-  const row=el.closest('tr');
-  row.className=now?'concluido':(c.sit==='D'?'desligado':'');
-  row.querySelector('td:last-child').innerHTML=now
-    ?`<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>`
-    :`<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>`;
-  updKPI();
-  toast(now?'✅ Pasta concluída':'↩ Desmarcada',now?'ok':'');
 }
 async function svBox(k,v){
   if(role!=='rh')return;
