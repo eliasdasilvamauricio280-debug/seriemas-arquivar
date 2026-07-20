@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>Teste Supabase</title>
+<style>
+body{font-family:system-ui;padding:2rem;max-width:600px;margin:0 auto;background:#f5f5f0;}
+.card{background:#fff;border-radius:12px;padding:1.5rem;margin-bottom:1rem;border:1px solid rgba(0,0,0,.1);}
+h2{font-size:16px;margin-bottom:1rem;}
+.result{font-size:13px;padding:10px;border-radius:8px;margin-top:10px;white-space:pre-wrap;word-break:break-all;}
+.ok{background:#eaf3de;color:#3b6d11;}
+.err{background:#fcebeb;color:#a32d2d;}
+.info{background:#e6f1fb;color:#185fa5;}
+button{padding:10px 20px;border-radius:8px;border:none;background:#1D4E9C;color:#fff;font-size:14px;cursor:pointer;font-family:system-ui;font-weight:600;}
+button:hover{background:#2d6abf;}
+</style>
+</head>
+<body>
+<h1 style="font-size:20px;font-weight:700;margin-bottom:1.5rem">🧪 Teste de Conexão Supabase</h1>
+
+<div class="card">
+  <h2>1. Leitura (GET)</h2>
+  <button onclick="testGet()">Testar leitura</button>
+  <div id="r1"></div>
+</div>
+
+<div class="card">
+  <h2>2. Gravação (POST/Upsert)</h2>
+  <button onclick="testPost()">Testar gravação</button>
+  <div id="r2"></div>
+</div>
+
+<div class="card">
+  <h2>3. Verificar registro salvo</h2>
+  <button onclick="testVerify()">Verificar</button>
+  <div id="r3"></div>
+</div>
+
+<div class="card">
+  <h2>4. Marcar 014452 (Andressa) como concluída</h2>
+  <button onclick="testAndressa()">Salvar Andressa</button>
+  <div id="r4"></div>
+</div>
+
+<script>
+const SB_URL = 'https://hxjreuodkrzeosmnqqmx.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4anJldW9ka3J6ZW9zbW5xcW14Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyODQ4OTcsImV4cCI6MjA5OTg2MDg5N30.lIu_NTGTUAYafm2DrLea4QNcQUfvirIRvaSYDznTIZ4';
+const HEADERS = {
+  'apikey': SB_KEY,
+  'Authorization': 'Bearer '+SB_KEY,
+  'Content-Type': 'application/json',
+  'Prefer': 'resolution=merge-duplicates,return=minimal'
+};
+
+function show(id, msg, type='info'){
+  document.getElementById(id).innerHTML = `<div class="result ${type}">${msg}</div>`;
+}
+
+async function testGet(){
+  show('r1','⏳ Testando...','info');
+  try {
+    const res = await fetch(SB_URL+'/rest/v1/arquivar?select=mat,ok&ok=eq.true&limit=3', {
+      headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    });
+    const txt = await res.text();
+    if(res.ok){
+      const data = JSON.parse(txt);
+      show('r1', `✅ HTTP ${res.status} — ${data.length} registros lidos:\n${JSON.stringify(data,null,2)}`, 'ok');
+    } else {
+      show('r1', `❌ HTTP ${res.status}\n${txt}`, 'err');
+    }
+  } catch(e){
+    show('r1', `❌ ERRO: ${e.message}`, 'err');
+  }
+}
+
+async function testPost(){
+  show('r2','⏳ Salvando...','info');
+  try {
+    const res = await fetch(SB_URL+'/rest/v1/arquivar', {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({mat:'TESTE_123', ok:true, com:'teste', box:'BOX-1', ts: new Date().toISOString()})
+    });
+    const txt = await res.text();
+    if(res.ok){
+      show('r2', `✅ HTTP ${res.status} — Gravação OK!\nResposta: ${txt||'(vazio = sucesso)'}`, 'ok');
+    } else {
+      show('r2', `❌ HTTP ${res.status}\n${txt}`, 'err');
+    }
+  } catch(e){
+    show('r2', `❌ ERRO: ${e.message}`, 'err');
+  }
+}
+
+async function testVerify(){
+  show('r3','⏳ Verificando...','info');
+  try {
+    const res = await fetch(SB_URL+'/rest/v1/arquivar?mat=eq.TESTE_123&select=*', {
+      headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    });
+    const txt = await res.text();
+    if(res.ok){
+      const data = JSON.parse(txt);
+      if(data.length > 0){
+        show('r3', `✅ Registro encontrado no Supabase!\n${JSON.stringify(data[0],null,2)}`, 'ok');
+      } else {
+        show('r3', `⚠️ Registro NÃO encontrado — gravação não funcionou!`, 'err');
+      }
+    } else {
+      show('r3', `❌ HTTP ${res.status}\n${txt}`, 'err');
+    }
+  } catch(e){
+    show('r3', `❌ ERRO: ${e.message}`, 'err');
+  }
+}
+
+async function testAndressa(){
+  show('r4','⏳ Salvando Andressa...','info');
+  try {
+    const res = await fetch(SB_URL+'/rest/v1/arquivar', {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({mat:'014452', ok:true, com:'', box:'5577', ts: new Date().toISOString()})
+    });
+    const txt = await res.text();
+    if(res.ok){
+      show('r4', `✅ HTTP ${res.status} — Andressa salva!\nAgora verifique no site principal.`, 'ok');
+    } else {
+      show('r4', `❌ HTTP ${res.status}\n${txt}`, 'err');
+    }
+  } catch(e){
+    show('r4', `❌ ERRO: ${e.message}`, 'err');
+  }
+}
+</script>
+</body>
+</html>
