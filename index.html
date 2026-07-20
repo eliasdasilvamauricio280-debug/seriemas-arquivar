@@ -2535,11 +2535,25 @@ async function sbLoadArquivar(){
 }
 async function sbSaveItem(mat, ok, com, box){
   window._savePending = false;
-  await sbFetch('arquivar', {
-    method:'POST',
-    prefer:'resolution=merge-duplicates,return=minimal',
-    body: JSON.stringify({mat, ok, com, box, ts: new Date().toISOString()})
-  });
+  try {
+    const res = await fetch(SB_URL+'/rest/v1/arquivar', {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer '+SB_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({mat, ok, com, box, ts: new Date().toISOString()})
+    });
+    if(!res.ok) {
+      const err = await res.text();
+      console.error('sbSaveItem failed:', res.status, err);
+      toast('⚠️ Erro ao salvar — tente novamente','err',3000);
+    }
+  } catch(e) {
+    console.error('sbSaveItem exception:', e);
+  }
 }
 async function sbLoadHisto(){
   const rows = await sbFetch('histograma_mo?id=eq.main');
@@ -2590,8 +2604,10 @@ function key(c){return c.mat && c.mat!=='0'?c.mat:c.nome;}
 function getD(c){return state[key(c)]||{ok:false,com:'',box:'',ts:null};}
 function setD(c,ok,com,box){
   const k=key(c);
-  state[k]={ok,com,box,ts:new Date().toISOString()};
+  const ts = new Date().toISOString();
+  state[k]={ok,com,box,ts};
   saveSt();
+  // Save immediately to Supabase — no debounce for checkbox/status changes
   sbSaveItem(k, ok, com, box);
 }
 
@@ -2798,7 +2814,11 @@ function tgl(k,el){
   const c=COLABORADORES.find(x=>key(x)===k);if(!c)return;
   const d=getD(c);
   const now=!d.ok;
-  setD(c,now,d.com||'',d.box||'');
+  // Save immediately to Supabase
+  const ts = new Date().toISOString();
+  state[k]={ok:now, com:d.com||'', box:d.box||'', ts};
+  saveSt();
+  sbSaveItem(k, now, d.com||'', d.box||'');
   el.classList.toggle('on',now);
   const row=el.closest('tr');
   row.className=now?'concluido':(c.sit==='D'?'desligado':'');
@@ -2813,7 +2833,11 @@ function svBox(k,v){
   const c=COLABORADORES.find(x=>key(x)===k);if(!c)return;
   const d=getD(c);
   if((d.box||'')===v)return;
-  setD(c,d.ok,d.com||'',v);
+  // Save box directly to Supabase
+  const ts = new Date().toISOString();
+  state[k]={...d, box:v, ts};
+  saveSt();
+  sbSaveItem(k, d.ok, d.com||'', v);
   toast('📦 Caixa box salva','ok');
 }
 function svCom(k,v){
@@ -2821,7 +2845,11 @@ function svCom(k,v){
   const c=COLABORADORES.find(x=>key(x)===k);if(!c)return;
   const d=getD(c);
   if((d.com||'')===v)return;
-  setD(c,d.ok,v,d.box||'');
+  // Save comment directly to Supabase
+  const ts = new Date().toISOString();
+  state[k]={...d, com:v, ts};
+  saveSt();
+  sbSaveItem(k, d.ok, v, d.box||'');
   toast('💬 Comentário salvo','ok');
 }
 function markAll(){
