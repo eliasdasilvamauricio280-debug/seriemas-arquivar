@@ -2527,35 +2527,49 @@ async function sbLoadArquivar(){
     loadSt();
     return;
   }
-  // Build a lookup by mat — both with and without leading zeros
+  console.log('Supabase retornou:', rows.length, 'registros');
+  const sbOk = rows.filter(r=>r.ok);
+  console.log('Concluídos no Supabase:', sbOk.length);
+  console.log('Primeiros 5 concluídos:', sbOk.slice(0,5).map(r=>r.mat));
+  
+  // Build lookup
   const sbMap = {};
   rows.forEach(r=>{
     const d = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts};
     sbMap[r.mat] = d;
-    // Also index by numeric value (strips leading zeros) for compatibility
     const num = String(parseInt(r.mat)||r.mat);
     if(num !== r.mat) sbMap[num] = d;
   });
   
-  // Map Supabase data to our state keys using the same key() logic
+  // Map to state
   state = {};
+  let matched = 0, notMatched = 0;
   COLABORADORES.forEach(c => {
     const k = key(c);
     const matStr = String(c.mat||'').trim();
     const matNum = String(parseInt(matStr)||matStr);
-    // Try all possible key variants
     const sb = sbMap[k] || sbMap[matStr] || sbMap[matNum] || sbMap['nome:'+c.nome];
-    if(sb) state[k] = sb;
+    if(sb) { state[k] = sb; if(sb.ok) matched++; }
+    else notMatched++;
   });
   
-  // Also keep any other keys from Supabase not matched above
+  // Keep unmatched Supabase records
   rows.forEach(r=>{
     if(!state[r.mat]) state[r.mat] = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts};
   });
   
   saveSt();
   const done = Object.values(state).filter(v=>v.ok).length;
-  toast('☁️ '+done+' pastas concluídas carregadas','ok',2500);
+  console.log('Estado final - concluídos:', done, '| matched:', matched, '| não matched:', notMatched);
+  
+  // Find unmatched OK records in Supabase
+  const stateKeys = Object.keys(state);
+  const unmatchedSB = rows.filter(r=>r.ok && !stateKeys.includes(r.mat));
+  if(unmatchedSB.length > 0){
+    console.warn('Registros OK no Supabase NÃO encontrados no efetivo:', unmatchedSB.map(r=>r.mat));
+  }
+  
+  toast('☁️ '+done+' pastas concluídas','ok',2500);
 }
 async function sbSaveItem(mat, ok, com, box){
   window._savePending = false;
