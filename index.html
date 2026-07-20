@@ -2524,17 +2524,36 @@ async function sbLoadArquivar(){
   const rows = await sbFetch('arquivar?select=*');
   if(!rows){
     toast('⚠️ Supabase offline — usando dados locais','err',4000);
-    loadSt(); // fallback to localStorage
+    loadSt();
     return;
   }
-  // Replace state completely with Supabase data
+  // Build a lookup by mat for fast access
+  const sbMap = {};
+  rows.forEach(r=>{ sbMap[r.mat] = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts}; });
+  
+  // Map Supabase data to our state keys using the same key() logic
   state = {};
-  rows.forEach(r=>{ state[r.mat]={ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts}; });
+  COLABORADORES.forEach(c => {
+    const k = key(c);
+    // Try mat first, then nome-based key
+    const sb = sbMap[k] || sbMap[c.mat] || sbMap['nome:'+c.nome];
+    if(sb) state[k] = sb;
+  });
+  
+  // Also keep any other keys from Supabase (edge cases)
+  rows.forEach(r=>{
+    if(!state[r.mat]) state[r.mat] = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts};
+  });
+  
   saveSt();
-  toast('☁️ '+rows.length+' registros carregados','ok',2000);
+  const done = Object.values(state).filter(v=>v.ok).length;
+  toast('☁️ '+done+' pastas concluídas carregadas','ok',2500);
 }
 async function sbSaveItem(mat, ok, com, box){
   window._savePending = false;
+  // Ensure mat is never null/empty/0 — use the key as-is (already fixed by key() function)
+  const safeMat = mat && mat !== '0' ? mat : mat;
+  if(!safeMat) { console.warn('sbSaveItem: empty mat, skipping'); return; }
   try {
     const res = await fetch(SB_URL+'/rest/v1/arquivar', {
       method: 'POST',
@@ -2544,12 +2563,12 @@ async function sbSaveItem(mat, ok, com, box){
         'Content-Type': 'application/json',
         'Prefer': 'resolution=merge-duplicates,return=minimal'
       },
-      body: JSON.stringify({mat, ok, com, box, ts: new Date().toISOString()})
+      body: JSON.stringify({mat:safeMat, ok, com, box, ts: new Date().toISOString()})
     });
     if(!res.ok) {
       const err = await res.text();
       console.error('sbSaveItem failed:', res.status, err);
-      toast('⚠️ Erro ao salvar — tente novamente','err',3000);
+      toast('⚠️ Erro ao salvar','err',3000);
     }
   } catch(e) {
     console.error('sbSaveItem exception:', e);
@@ -2641,42 +2660,17 @@ function doLogin(perfil){
   if(p==='rh') sbLoadHisto();
 }
 function startAutoRefresh() {
-  // Silently sync every 60s — only updates state, never re-renders while user is editing
-  if(window._refreshTimer) clearInterval(window._refreshTimer);
-  window._refreshTimer = setInterval(async () => {
-    // Skip refresh if user is actively typing in a field
-    if(document.activeElement && (
-      document.activeElement.tagName === 'INPUT' ||
-      document.activeElement.tagName === 'TEXTAREA'
-    )) return;
-    // Skip if there's a pending save (debounce active)
-    if(window._savePending) return;
-    const rows = await sbFetch('arquivar?select=*');
-    if(!rows) return;
-    // Merge: only update records that are NEWER in Supabase
-    rows.forEach(r=>{
-      const local = state[r.mat];
-      // If local has a newer timestamp (user just edited), keep local
-      if(local && local.ts && r.ts && new Date(local.ts) > new Date(r.ts)) return;
-      state[r.mat] = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts};
-    });
-    saveSt();
-    // Soft UI update: only update checkboxes and status cells, not inputs
-    softUpdateUI();
-  }, 60000);
+  // Disabled - auto-refresh caused data loss. Data loads only on login.
+  // Manual refresh button available if needed.
 }
 
 function softUpdateUI() {
-  // Update only checkbox and status cells without destroying input values
   document.querySelectorAll('#tBody tr[data-k]').forEach(row => {
     const k = row.dataset.k;
     const d = getD({mat:k, nome:k});
     const chk = row.querySelector('.ccheck');
     const statusCell = row.querySelector('td:last-child');
-    if(chk) {
-      chk.classList.toggle('on', d.ok);
-      row.classList.toggle('concluido', d.ok);
-    }
+    if(chk) { chk.classList.toggle('on', d.ok); row.classList.toggle('concluido', d.ok); }
     if(statusCell) {
       statusCell.innerHTML = d.ok
         ? '<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>'
