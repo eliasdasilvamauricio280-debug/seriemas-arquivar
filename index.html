@@ -2529,11 +2529,12 @@ async function sbLoadArquivar(){
   }
   // Replace state completely with Supabase data
   state = {};
-  rows.forEach(r=>{ state[r.mat]={ok:r.ok,com:r.com||'',box:r.box||'',ts:r.ts}; });
+  rows.forEach(r=>{ state[r.mat]={ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts}; });
   saveSt();
-  toast('☁️ '+rows.length+' registros sincronizados','ok',2000);
+  toast('☁️ '+rows.length+' registros carregados','ok',2000);
 }
 async function sbSaveItem(mat, ok, com, box){
+  window._savePending = false;
   await sbFetch('arquivar', {
     method:'POST',
     prefer:'resolution=merge-duplicates,return=minimal',
@@ -2621,16 +2622,49 @@ function doLogin(perfil){
   if(p==='rh') sbLoadHisto();
 }
 function startAutoRefresh() {
-  // Auto-refresh data every 30 seconds for all users
+  // Silently sync every 60s — only updates state, never re-renders while user is editing
   if(window._refreshTimer) clearInterval(window._refreshTimer);
   window._refreshTimer = setInterval(async () => {
+    // Skip refresh if user is actively typing in a field
+    if(document.activeElement && (
+      document.activeElement.tagName === 'INPUT' ||
+      document.activeElement.tagName === 'TEXTAREA'
+    )) return;
+    // Skip if there's a pending save (debounce active)
+    if(window._savePending) return;
     const rows = await sbFetch('arquivar?select=*');
     if(!rows) return;
-    state = {};
-    rows.forEach(r=>{ state[r.mat]={ok:r.ok,com:r.com||'',box:r.box||'',ts:r.ts}; });
+    // Merge: only update records that are NEWER in Supabase
+    rows.forEach(r=>{
+      const local = state[r.mat];
+      // If local has a newer timestamp (user just edited), keep local
+      if(local && local.ts && r.ts && new Date(local.ts) > new Date(r.ts)) return;
+      state[r.mat] = {ok:r.ok, com:r.com||'', box:r.box||'', ts:r.ts};
+    });
     saveSt();
-    applyF(); updKPI();
-  }, 30000);
+    // Soft UI update: only update checkboxes and status cells, not inputs
+    softUpdateUI();
+  }, 60000);
+}
+
+function softUpdateUI() {
+  // Update only checkbox and status cells without destroying input values
+  document.querySelectorAll('#tBody tr[data-k]').forEach(row => {
+    const k = row.dataset.k;
+    const d = getD({mat:k, nome:k});
+    const chk = row.querySelector('.ccheck');
+    const statusCell = row.querySelector('td:last-child');
+    if(chk) {
+      chk.classList.toggle('on', d.ok);
+      row.classList.toggle('concluido', d.ok);
+    }
+    if(statusCell) {
+      statusCell.innerHTML = d.ok
+        ? '<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>'
+        : '<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>';
+    }
+  });
+  updKPI();
 }
 
 function doLogout(){
@@ -2733,8 +2767,8 @@ function render(){
       <td><span class="sit-b sit-${c.sit}">${c.sit}</span></td>
       <td class="hm">${admStr}</td>
       <td>${demStr}</td>
-      <td><input class="tag-inp" type="text" value="${bv}" placeholder="BOX-" ${dis} onblur="svBox('${k}',this.value)" onkeydown="if(event.key==='Enter')this.blur()"></td>
-      <td><input class="comm-inp" type="text" value="${cv}" placeholder="${isRH?'Obs...':'—'}" ${dis} onblur="svCom('${k}',this.value)" onkeydown="if(event.key==='Enter')this.blur()"></td>
+      <td><input class="tag-inp" type="text" value="${bv}" placeholder="BOX-" ${dis} onblur="svBox('${k}',this.value)" oninput="window._savePending=true" onkeydown="if(event.key==='Enter')this.blur()"></td>
+      <td><input class="comm-inp" type="text" value="${cv}" placeholder="${isRH?'Obs...':'—'}" ${dis} onblur="svCom('${k}',this.value)" oninput="window._savePending=true" onkeydown="if(event.key==='Enter')this.blur()"></td>
       <td>${d.ok?`<span class="st-done"><i class="ti ti-circle-check-filled"></i>Concluído</span>`:`<span class="st-pend"><i class="ti ti-clock"></i>Pendente</span>`}</td>
       ${acoesCell}
     </tr>`;
