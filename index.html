@@ -2600,7 +2600,10 @@ async function sbSaveRest(table, data){
   });
   if(!res.ok) console.error('sbSaveRest error', table, res.status, await res.text());
 }
-function key(c){return c.mat && c.mat!=='0'?c.mat:c.nome;}
+function key(c){
+  if(!c.mat || c.mat==='0' || c.mat.trim()==='') return 'nome:'+c.nome;
+  return c.mat.trim();
+}
 function getD(c){return state[key(c)]||{ok:false,com:'',box:'',ts:null};}
 function setD(c,ok,com,box){
   const k=key(c);
