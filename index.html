@@ -2521,7 +2521,26 @@ function saveSt(){localStorage.setItem(SK,JSON.stringify(state));}
 
 /* ── Supabase sync ── */
 async function sbLoadArquivar(){
-  const rows = await sbFetch('arquivar?select=*');
+  // Fetch ALL records - Supabase limits to 1000 by default, use pagination
+  let rows = [];
+  let from = 0;
+  const pageSize = 1000;
+  while(true){
+    const res = await fetch(SB_URL+'/rest/v1/arquivar?select=*', {
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer '+SB_KEY,
+        'Range': `${from}-${from+pageSize-1}`,
+        'Range-Unit': 'items'
+      }
+    });
+    if(!res.ok) { rows = null; break; }
+    const page = await res.json();
+    if(!page || page.length === 0) break;
+    rows = rows.concat(page);
+    if(page.length < pageSize) break;
+    from += pageSize;
+  }
   if(!rows){
     toast('⚠️ Supabase offline — usando dados locais','err',4000);
     loadSt();
